@@ -1,44 +1,41 @@
-"""googlesearch is a Python library for searching Google, easily."""
 import asyncio
+import httpx
 from time import sleep
 from bs4 import BeautifulSoup
-from requests import get
 from urllib.parse import unquote # to decode the url
 from .user_agents import get_useragent
 from .includes import SearchResult
-from .asearch import asearch
 
-def _req(term, results, lang, start, proxies, timeout, safe, ssl_verify, region):
-    resp = get(
-        url="https://www.google.com/search",
-        headers={
-            "User-Agent": get_useragent(),
-            "Accept": "*/*"
-        },
-        params={
-            "q": term,
-            "num": results + 2,  # Prevents multiple requests
-            "hl": lang,
-            "start": start,
-            "safe": safe,
-            "gl": region,
-        },
-        proxies=proxies,
-        timeout=timeout,
-        verify=ssl_verify,
-        cookies = {
-            'CONSENT': 'PENDING+987', # Bypasses the consent page
-            'SOCS': 'CAESHAgBEhIaAB',
-        }
-    )
+async def _areq(term, results, lang, start, proxies, timeout, safe, ssl_verify, region):
+    async with httpx.AsyncClient(proxy=proxies) as client:
+        resp = await client.get(
+            url="https://www.google.com/search",
+            headers={
+                "User-Agent": get_useragent(),
+                "Accept": "*/*"
+            },
+            params={
+                "q": term,
+                "num": results + 2,  # Prevents multiple requests
+                "hl": lang,
+                "start": start,
+                "safe": safe,
+                "gl": region,
+            },
+            timeout=timeout,
+            cookies = {
+                'CONSENT': 'PENDING+987', # Bypasses the consent page
+                'SOCS': 'CAESHAgBEhIaAB',
+            }
+        )
     resp.raise_for_status()
     return resp
 
-def search(term, num_results=10, lang="en", proxy=None, advanced=False, sleep_interval=0, timeout=5, safe="active", ssl_verify=None, region=None, start_num=0, unique=False):
+async def asearch(term, num_results=10, lang="en", proxy=None, advanced=False, sleep_interval=0, timeout=5, safe="active", ssl_verify=None, region=None, start_num=0, unique=False):
     """Search the Google search engine"""
 
     # Proxy setup
-    proxies = {"https": proxy, "http": proxy} if proxy and (proxy.startswith("https") or proxy.startswith("http")) else None
+    proxies = proxy if proxy and (proxy.startswith("https") or proxy.startswith("http") or proxy.startswith("socks")) else None
 
     start = start_num
     fetched_results = 0  # Keep track of the total fetched results
@@ -46,7 +43,7 @@ def search(term, num_results=10, lang="en", proxy=None, advanced=False, sleep_in
 
     while fetched_results < num_results:
         # Send request
-        resp = _req(term, num_results - start,
+        resp = await _areq(term, num_results - start,
                     lang, start, proxies, timeout, safe, ssl_verify, region)
         
         # put in file - comment for debugging purpose
@@ -100,4 +97,5 @@ def search(term, num_results=10, lang="en", proxy=None, advanced=False, sleep_in
             break  # Break the loop if no new results were found in this iteration
 
         start += 10  # Prepare for the next set of results
-        sleep(sleep_interval)
+        await asyncio.sleep(sleep_interval)
+
